@@ -7,10 +7,22 @@
 import {
   GROUP_IDS, GROUPS, groupFixtures, R32_SLOTS,
   R16_WIRING, QF_WIRING, SF_WIRING, BRONZE, FINAL,
+  FIXTURE_BY_ID, KO_DATES,
 } from './data.js';
 
 export function emptyPicks() {
   return { group: {}, ko: {} };
+}
+
+// A match locks for predictions once its real-world kickoff has passed.
+export function isGroupLocked(fixtureId, now) {
+  const fx = FIXTURE_BY_ID[fixtureId];
+  return !!fx && now >= Date.parse(fx.t);
+}
+
+export function isKoLocked(matchNo, now) {
+  const t = KO_DATES[matchNo];
+  return !!t && now >= Date.parse(t);
 }
 
 // Compute a group table from match picks.
@@ -143,6 +155,16 @@ export function resolveBracket(picks) {
   };
 }
 
+// Played matches belong to reality: official results override predictions when
+// building tables and brackets (points are still only earned on matches the
+// player actually picked). Lets late joiners play and converges every bracket
+// to the real Round of 32 as the group stage completes.
+export function mergedPicks(player, official) {
+  const group = { ...player.group };
+  for (const [fid, res] of Object.entries(official?.group ?? {})) group[fid] = res;
+  return { group, ko: player.ko };
+}
+
 // ----- Scoring -----
 // Group match: correct result (winner or draw) = 1 pt.
 //   Decisive result with the exact goal difference = +0.5 (draws are always GD 0,
@@ -171,7 +193,7 @@ export function scorePlayer(playerPicks, officialPicks) {
     }
   }
 
-  const pb = resolveBracket(playerPicks);
+  const pb = resolveBracket(mergedPicks(playerPicks, officialPicks));
   const ob = resolveBracket(officialPicks);
   for (let no = 73; no <= 104; no++) {
     const pm = pb.matches[no], om = ob.matches[no];
